@@ -31,3 +31,22 @@ instructor_advisor_relationships = """
             WHERE I1.ADVISOR_ID = I.ADVISOR_ID
             AND I1.INSTRUCTOR_ADISOR_NUMBER = I.INSTRUCTOR_ADISOR_NUMBER
         )"""
+
+
+# See http://www.oracle.com/technetwork/issue-archive/2006/06-sep/o56asktom-086197.html for explanation of
+# query batching with ROWNUM.
+def get_batch_basic_attributes(batch_number, batch_size):
+    mininum_row_exclusive = (batch_number * batch_size)
+    maximum_row_inclusive = mininum_row_exclusive + batch_size
+    return f"""
+        SELECT ldap_uid, sid, first_name, last_name, email_address, affiliations, person_type, alternateid
+            FROM (SELECT /*+ FIRST_ROWS(n) */ attributes.*, ROWNUM rnum
+                FROM (SELECT
+                    pi.ldap_uid, pi.student_id AS sid, TRIM(pi.first_name) AS first_name, TRIM(pi.last_name) as last_name,
+                    pi.email_address, pi.affiliations, pi.person_type, pi.alternateid
+                    FROM SISEDO.CALCENTRAL_PERSON_INFO_VW pi
+                    WHERE person_type != 'Z'
+                    ORDER BY pi.ldap_uid
+                ) attributes
+            WHERE ROWNUM <= {maximum_row_inclusive})
+        WHERE rnum > {mininum_row_exclusive}"""
