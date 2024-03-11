@@ -1,7 +1,9 @@
 from contextlib import contextmanager
+from datetime import datetime
 import gzip
 import os
 import tempfile
+import time
 
 import boto3
 from botocore.exceptions import ClientError as BotoClientError, ConnectionError as BotoConnectionError
@@ -10,6 +12,7 @@ import oracledb
 
 
 BATCH_SIZE = 120000
+RECENT_REFRESH_CUTOFF_DAYS = 1
 
 
 class Job:
@@ -24,17 +27,28 @@ class Job:
             self.upload_query_results(queries.instructor_advisor_relationships, 'sis-data/jonesy-temp/instructor-advisor-map.gz')
         elif self.name == 'upload_basic_attributes':
             self.upload_batched_query_results(queries.get_batch_basic_attributes, 'sis-data/jonesy-temp/basic-attributes.gz')
+        elif self.name == 'upload_recent_term_data':
+            recency_cutoff = datetime.fromtimestamp(time.time() - (RECENT_REFRESH_CUTOFF_DAYS * 86400))
+            for term_id in self.get_current_term_ids():
+                self.upload_query_results(
+                    queries.get_recent_instructor_updates(term_id, recency_cutoff),
+                    f'sis-data/jonesy-temp/instructor-updates-{term_id}.gz',
+                )
+                self.upload_query_results(
+                    queries.get_recent_enrollment_updates(term_id, recency_cutoff),
+                    f'sis-data/jonesy-temp/enrollment-updates-{term_id}.gz',
+                )
         else:
             print(f"Job {self.name} not found, aborting")
 
-    def get_sts_credentials(self):
-        sts_client = boto3.client('sts')
-        assumed_role_object = sts_client.assume_role(
-            RoleArn=self.config['AWS_ROLE_ARN'],
-            RoleSessionName='AssumeAppRoleSession',
-            DurationSeconds=3600,
-        )
-        return assumed_role_object['Credentials']
+    def get_client(self):
+        session = self.get_session()
+        return session.client('s3', region_name=self.config['AWS_REGION'])
+
+    def get_current_term_ids(self):
+        with sisedo_connection(self.config) as sisedo:
+            term_ids = [r[0] for r in sisedo.execute(queries.current_terms)]
+        return term_ids
 
     def get_session(self):
         if self.config['AWS_ROLE_ARN']:
@@ -50,9 +64,14 @@ class Job:
                 aws_secret_access_key=self.config['AWS_SECRET_ACCESS_KEY'],
             )
 
-    def get_client(self):
-        session = self.get_session()
-        return session.client('s3', region_name=self.config['AWS_REGION'])
+    def get_sts_credentials(self):
+        sts_client = boto3.client('sts')
+        assumed_role_object = sts_client.assume_role(
+            RoleArn=self.config['AWS_ROLE_ARN'],
+            RoleSessionName='AssumeAppRoleSession',
+            DurationSeconds=3600,
+        )
+        return assumed_role_object['Credentials']
 
     def upload_batched_query_results(self, query_method, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
