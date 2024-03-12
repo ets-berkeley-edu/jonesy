@@ -24,7 +24,7 @@ class Job:
 
     def run(self):
         daily_path = get_daily_path()
-        if self.name == 'upload_advisor_relationships':
+        if self.name == 'upload_advisors':
             self.upload_query_results(
                 queries.get_advisor_notes_access(),
                 f'sis-data/sis-sysadm/{daily_path}/advisors/advisor-note-permissions.gz',
@@ -33,12 +33,7 @@ class Job:
                 queries.get_instructor_advisor_relationships(),
                 f'sis-data/sis-sysadm/{daily_path}/advisors/instructor-advisor-map.gz',
             )
-        elif self.name == 'upload_basic_attributes':
-            self.upload_batched_query_results(
-                queries.get_basic_attributes(),
-                f'sis-data/{daily_path}/basic-attributes.gz',
-            )
-        elif self.name == 'upload_recent_term_data':
+        elif self.name == 'upload_recent_refresh':
             recency_cutoff = datetime.fromtimestamp(time.time() - (RECENT_REFRESH_CUTOFF_DAYS * 86400))
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
@@ -49,7 +44,11 @@ class Job:
                     queries.get_recent_enrollment_updates(term_id, recency_cutoff),
                     f'sis-data/{daily_path}/enrollment-updates-{term_id}.gz',
                 )
-        elif self.name == 'upload_term_data':
+        elif self.name == 'upload_snapshot':
+            self.upload_batched_query_results(
+                queries.get_basic_attributes(),
+                f'sis-data/{daily_path}/basic-attributes.gz',
+            )
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
                     queries.get_term_courses(term_id),
