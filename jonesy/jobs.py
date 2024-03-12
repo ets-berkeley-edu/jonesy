@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from datetime import datetime
 import gzip
+import hashlib
 import os
 import tempfile
 import time
@@ -22,21 +23,41 @@ class Job:
         self.config = config
 
     def run(self):
+        daily_path = get_daily_path()
         if self.name == 'upload_advisor_relationships':
-            self.upload_query_results(queries.advisor_notes_access, 'sis-data/jonesy-temp/advisor_notes_access.gz')
-            self.upload_query_results(queries.instructor_advisor_relationships, 'sis-data/jonesy-temp/instructor-advisor-map.gz')
+            self.upload_query_results(
+                queries.get_advisor_notes_access(),
+                f'sis-data/sis-sysadm/{daily_path}/advisors/advisor-note-permissions.gz',
+            )
+            self.upload_query_results(
+                queries.get_instructor_advisor_relationships(),
+                f'sis-data/sis-sysadm/{daily_path}/advisors/instructor-advisor-map.gz',
+            )
         elif self.name == 'upload_basic_attributes':
-            self.upload_batched_query_results(queries.get_batch_basic_attributes, 'sis-data/jonesy-temp/basic-attributes.gz')
+            self.upload_batched_query_results(
+                queries.get_basic_attributes(),
+                f'sis-data/{daily_path}/basic-attributes.gz',
+            )
         elif self.name == 'upload_recent_term_data':
             recency_cutoff = datetime.fromtimestamp(time.time() - (RECENT_REFRESH_CUTOFF_DAYS * 86400))
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
                     queries.get_recent_instructor_updates(term_id, recency_cutoff),
-                    f'sis-data/jonesy-temp/instructor-updates-{term_id}.gz',
+                    f'sis-data/{daily_path}/instructor-updates-{term_id}.gz',
                 )
                 self.upload_query_results(
                     queries.get_recent_enrollment_updates(term_id, recency_cutoff),
-                    f'sis-data/jonesy-temp/enrollment-updates-{term_id}.gz',
+                    f'sis-data/{daily_path}/enrollment-updates-{term_id}.gz',
+                )
+        elif self.name == 'upload_term_data':
+            for term_id in self.get_current_term_ids():
+                self.upload_query_results(
+                    queries.get_term_courses(term_id),
+                    f'sis-data/{daily_path}/courses-{term_id}.gz',
+                )
+                self.upload_batched_query_results(
+                    queries.get_term_enrollments(term_id),
+                    f'sis-data/{daily_path}/enrollments-{term_id}.gz',
                 )
         else:
             print(f"Job {self.name} not found, aborting")
@@ -47,7 +68,7 @@ class Job:
 
     def get_current_term_ids(self):
         with sisedo_connection(self.config) as sisedo:
-            term_ids = [r[0] for r in sisedo.execute(queries.current_terms)]
+            term_ids = [r[0] for r in sisedo.execute(queries.get_current_terms())]
         return term_ids
 
     def get_session(self):
@@ -73,13 +94,13 @@ class Job:
         )
         return assumed_role_object['Credentials']
 
-    def upload_batched_query_results(self, query_method, s3_key):
+    def upload_batched_query_results(self, batch_query, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
             results_gzipfile = gzip.GzipFile(mode='wb', fileobj=results_tempfile)
             with sisedo_connection(self.config) as sisedo:
                 batch = 0
                 while True:
-                    sql = query_method(batch, BATCH_SIZE)
+                    sql = batch_query(batch, BATCH_SIZE)
                     row_count = 0
                     for r in sisedo.execute(sql):
                         row_count += 1
@@ -116,6 +137,12 @@ class Job:
             results_gzipfile.close()
 
             self.upload_data(results_tempfile, s3_key)
+
+
+def get_daily_path():
+    today = datetime.now().strftime('%Y-%m-%d')
+    digest = hashlib.md5(today.encode()).hexdigest()
+    return f"daily/{digest}-{today}"
 
 
 def encoded_tsv_row(elements):
