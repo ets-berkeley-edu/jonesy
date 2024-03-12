@@ -27,36 +27,36 @@ class Job:
         if self.name == 'upload_advisors':
             self.upload_query_results(
                 queries.get_advisor_notes_access(),
-                f'sis-data/sis-sysadm/{daily_path}/advisors/advisor-note-permissions.gz',
+                f'sis-data/sis-sysadm/{daily_path}/advisors/advisor-note-permissions/advisor-note-permissions.gz',
             )
             self.upload_query_results(
                 queries.get_instructor_advisor_relationships(),
-                f'sis-data/sis-sysadm/{daily_path}/advisors/instructor-advisor-map.gz',
+                f'sis-data/sis-sysadm/{daily_path}/advisors/instructor-advisor-map/instructor-advisor-map.gz',
             )
         elif self.name == 'upload_recent_refresh':
             recency_cutoff = datetime.fromtimestamp(time.time() - (RECENT_REFRESH_CUTOFF_DAYS * 86400))
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
                     queries.get_recent_instructor_updates(term_id, recency_cutoff),
-                    f'sis-data/{daily_path}/instructor-updates-{term_id}.gz',
+                    f'sis-data/{daily_path}/instructor_updates/instructor-updates-{term_id}.gz',
                 )
                 self.upload_query_results(
                     queries.get_recent_enrollment_updates(term_id, recency_cutoff),
-                    f'sis-data/{daily_path}/enrollment-updates-{term_id}.gz',
+                    f'sis-data/{daily_path}/enrollment_updates/enrollment-updates-{term_id}.gz',
                 )
         elif self.name == 'upload_snapshot':
             self.upload_batched_query_results(
                 queries.get_basic_attributes(),
-                f'sis-data/{daily_path}/basic-attributes.gz',
+                f'sis-data/{daily_path}/basic-attributes/basic-attributes.gz',
             )
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
                     queries.get_term_courses(term_id),
-                    f'sis-data/{daily_path}/courses-{term_id}.gz',
+                    f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
                 )
                 self.upload_batched_query_results(
                     queries.get_term_enrollments(term_id),
-                    f'sis-data/{daily_path}/enrollments-{term_id}.gz',
+                    f'sis-data/{daily_path}/enrollments/enrollments-{term_id}.gz',
                 )
         else:
             print(f"Job {self.name} not found, aborting")
