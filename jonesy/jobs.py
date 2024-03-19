@@ -1,7 +1,9 @@
 from contextlib import contextmanager
+import csv
 from datetime import datetime
 import gzip
 import hashlib
+import io
 import os
 import tempfile
 import time
@@ -96,18 +98,20 @@ class Job:
     def upload_batched_query_results(self, batch_query, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
             results_gzipfile = gzip.GzipFile(mode='wb', fileobj=results_tempfile)
-            with sisedo_connection(self.config) as sisedo:
-                batch = 0
-                while True:
-                    sql = batch_query(batch, BATCH_SIZE)
-                    row_count = 0
-                    for r in sisedo.execute(sql):
-                        row_count += 1
-                        results_gzipfile.write(encoded_tsv_row(r) + b'\n')
-                    # If we receive fewer rows than the batch size, we've read all available rows and are done.
-                    if row_count < BATCH_SIZE:
-                        break
-                    batch += 1
+            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as wrapper:
+                results_writer = csv.writer(wrapper, lineterminator='\n')
+                with sisedo_connection(self.config) as sisedo:
+                    batch = 0
+                    while True:
+                        sql = batch_query(batch, BATCH_SIZE)
+                        row_count = 0
+                        for r in sisedo.execute(sql):
+                            row_count += 1
+                            results_writer.writerow(r)
+                        # If we receive fewer rows than the batch size, we've read all available rows and are done.
+                        if row_count < BATCH_SIZE:
+                            break
+                        batch += 1
             results_gzipfile.close()
 
             self.upload_data(results_tempfile, s3_key)
@@ -130,9 +134,11 @@ class Job:
     def upload_query_results(self, sql, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
             results_gzipfile = gzip.GzipFile(mode='wb', fileobj=results_tempfile)
-            with sisedo_connection(self.config) as sisedo:
-                for r in sisedo.execute(sql):
-                    results_gzipfile.write(encoded_tsv_row(r) + b'\n')
+            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as wrapper:
+                results_writer = csv.writer(wrapper, lineterminator='\n')
+                with sisedo_connection(self.config) as sisedo:
+                    for r in sisedo.execute(sql):
+                        results_writer.writerow(r)
             results_gzipfile.close()
 
             self.upload_data(results_tempfile, s3_key)
@@ -142,15 +148,6 @@ def get_daily_path():
     today = datetime.now().strftime('%Y-%m-%d')
     digest = hashlib.md5(today.encode()).hexdigest()
     return f"daily/{digest}-{today}"
-
-
-def encoded_tsv_row(elements):
-    def _to_tsv_string(e):
-        if e is None:
-            return ''
-        else:
-            return str(e)
-    return '\t'.join([_to_tsv_string(e) for e in elements]).encode()
 
 
 @contextmanager
