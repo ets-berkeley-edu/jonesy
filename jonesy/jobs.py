@@ -12,10 +12,11 @@ import boto3
 from botocore.exceptions import ClientError as BotoClientError, ConnectionError as BotoConnectionError
 from jonesy import queries
 import oracledb
+import pytz
 
 
 BATCH_SIZE = 120000
-RECENT_REFRESH_CUTOFF_DAYS = 1
+RECENT_REFRESH_CUTOFF_DAYS = 5
 
 
 class Job:
@@ -98,16 +99,12 @@ class Job:
     def upload_batched_query_results(self, batch_query, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
             results_gzipfile = gzip.GzipFile(mode='wb', fileobj=results_tempfile)
-            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as wrapper:
-                results_writer = csv.writer(wrapper, lineterminator='\n')
+            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as outfile:
                 with sisedo_connection(self.config) as sisedo:
                     batch = 0
                     while True:
                         sql = batch_query(batch, BATCH_SIZE)
-                        row_count = 0
-                        for r in sisedo.execute(sql):
-                            row_count += 1
-                            results_writer.writerow(r)
+                        row_count = _write_csv_rows(sisedo, sql, outfile)
                         # If we receive fewer rows than the batch size, we've read all available rows and are done.
                         if row_count < BATCH_SIZE:
                             break
@@ -134,11 +131,9 @@ class Job:
     def upload_query_results(self, sql, s3_key):
         with tempfile.TemporaryFile() as results_tempfile:
             results_gzipfile = gzip.GzipFile(mode='wb', fileobj=results_tempfile)
-            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as wrapper:
-                results_writer = csv.writer(wrapper, lineterminator='\n')
+            with io.TextIOWrapper(results_gzipfile, encoding='utf-8', newline='\n') as outfile:
                 with sisedo_connection(self.config) as sisedo:
-                    for r in sisedo.execute(sql):
-                        results_writer.writerow(r)
+                    _write_csv_rows(sisedo, sql, outfile)
             results_gzipfile.close()
 
             self.upload_data(results_tempfile, s3_key)
@@ -161,3 +156,26 @@ def sisedo_connection(config):
     ) as connection:
         with connection.cursor() as cursor:
             yield cursor
+
+
+def _write_csv_rows(connection, sql, outfile):
+    def _coerce(column_name, e):
+        if isinstance(e, datetime):
+            # last_updated values come in with a UTC timezone, which is wrong; they should be treated as local time.
+            if column_name == 'last_updated':
+                return e.astimezone(pytz.timezone('America/Los_Angeles')).strftime('%Y-%m-%d %H:%M:%S %z')
+            else:
+                return e.strftime('%Y-%m-%d %H:%M:%S UTC')
+        else:
+            return e
+    
+    results_writer = csv.writer(outfile, lineterminator='\n')
+    result = connection.execute(sql)
+    column_names = [c[0].lower() for c in result.description]
+    for row_count, r in enumerate(result):
+        results_writer.writerow([_coerce(column_names[idx], e) for idx, e in enumerate(r)])
+
+    try:
+        return row_count + 1
+    except NameError:
+        return 0
