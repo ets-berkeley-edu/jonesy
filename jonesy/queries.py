@@ -41,7 +41,7 @@ def get_basic_attributes():
                         pi.ldap_uid, pi.student_id AS sid, TRIM(pi.first_name) AS first_name, TRIM(pi.last_name) as last_name,
                         pi.email_address, pi.affiliations, pi.person_type, pi.alternateid
                         FROM SISEDO.CALCENTRAL_PERSON_INFO_VW pi
-                        WHERE person_type != 'Z'
+                        WHERE person_type != 'Z' AND affiliations IS NOT NULL
                         ORDER BY pi.ldap_uid
                     ) attributes
                 WHERE ROWNUM <= {maximum_row_inclusive})
