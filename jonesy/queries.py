@@ -163,7 +163,7 @@ def get_term_courses(term_id):
             TO_CHAR(CLASS_NBR_1) as primary_associated_section_id,
             TRIM(DISPLAY_NAME) AS display_name,
             CLASS_SECTION AS section_num,
-            CATALOG_NBR AS catalog_id,
+            TRIM(CATALOG_NBR) AS catalog_id,
             regexp_replace(trim(CATALOG_NBR), '[A-Za-z]') AS catalog_root,
             REPLACE(SUBSTR(REPLACE(trim(CATALOG_NBR),regexp_replace(trim(CATALOG_NBR), '[A-Za-z]'),'|'),1,1),'|','') AS catalog_prefix,
             SUBSTR(REPLACE(trim(CATALOG_NBR),regexp_replace(trim(CATALOG_NBR), '[A-Za-z]'),'|'),instr(REPLACE(trim(CATALOG_NBR),regexp_replace(trim(CATALOG_NBR), '[A-Za-z]'),'|'),'|')+1) AS catalog_suffix,
@@ -197,7 +197,7 @@ def get_term_courses(term_id):
             TO_CHAR(MEETING_TIME_END,'HH24:MI') AS meeting_end_time,
             START_DATE AS meeting_start_date,
             END_DATE AS meeting_end_date,
-            COURSE_TITLE_LONG AS course_title,
+            TRIM(REPLACE(REPLACE(COURSE_TITLE_LONG, CHR(10)), CHR(13))) AS course_title,
             COURSE_TITLE AS course_title_short,
             INSTRUCTION_MODE AS instruction_mode
         FROM SISEDO.BCOURSESV00_VW
