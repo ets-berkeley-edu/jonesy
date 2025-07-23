@@ -56,13 +56,13 @@ class Job:
                 self.upload_query_results(
                     queries.get_term_courses_deprecated(term_id),
                     f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                    targets='la-nessie-prod'
+                    targets='la-nessie-qa,la-nessie-dev,la-nessie-prod'
                 )
-                self.upload_query_results(
-                    queries.get_term_courses(term_id),
-                    f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                    targets='la-nessie-qa,la-nessie-dev'
-                )
+                # self.upload_query_results(
+                #     queries.get_term_courses(term_id),
+                #     f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
+                #     targets='la-nessie-qa,la-nessie-dev'
+                # )
                 self.upload_batched_query_results(
                     queries.get_term_enrollments(term_id),
                     f'sis-data/{daily_path}/enrollments/enrollments-{term_id}.gz',
@@ -177,7 +177,7 @@ def _write_csv_rows(connection, sql, outfile):
                 return e.strftime('%Y-%m-%d %H:%M:%S UTC')
         else:
             return e
-    
+
     results_writer = csv.writer(outfile, lineterminator='\n')
     result = connection.execute(sql)
     column_names = [c[0].lower() for c in result.description]
