@@ -56,13 +56,13 @@ class Job:
                 self.upload_query_results(
                     queries.get_term_courses_deprecated(term_id),
                     f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                    targets='la-nessie-qa,la-nessie-dev,la-nessie-prod'
+                    targets='la-nessie-qa,la-nessie-prod'
                 )
-                # self.upload_query_results(
-                #     queries.get_term_courses(term_id),
-                #     f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                #     targets='la-nessie-qa,la-nessie-dev'
-                # )
+                self.upload_query_results(
+                    queries.get_term_courses(term_id),
+                    f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
+                    targets='la-nessie-dev'
+                )
                 self.upload_batched_query_results(
                     queries.get_term_enrollments(term_id),
                     f'sis-data/{daily_path}/enrollments/enrollments-{term_id}.gz',
