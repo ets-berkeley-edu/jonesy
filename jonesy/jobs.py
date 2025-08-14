@@ -54,14 +54,8 @@ class Job:
             )
             for term_id in self.get_current_term_ids():
                 self.upload_query_results(
-                    queries.get_term_courses_deprecated(term_id),
-                    f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                    targets='la-nessie-prod'
-                )
-                self.upload_query_results(
                     queries.get_term_courses(term_id),
                     f'sis-data/{daily_path}/courses/courses-{term_id}.gz',
-                    targets='la-nessie-dev,la-nessie-qa'
                 )
                 self.upload_batched_query_results(
                     queries.get_term_enrollments(term_id),
